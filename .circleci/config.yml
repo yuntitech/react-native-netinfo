@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  rn: react-native-community/react-native@1.2.0
+  rn: react-native-community/react-native@dev:3.0.1-rc1
 
 jobs:
   checkout_code:
@@ -62,16 +62,14 @@ workflows:
       #     detox_loglevel: "trace"
       #     requires:
       #       - build_android_debug
-      # - rn/ios_build_and_test:
-      #     project_path: "example/ios/NetInfoExample.xcodeproj"
-      #     derived_data_path: "example/ios/build"
-      #     device: "iPhone X"
-      #     build_configuration: "Release"
-      #     scheme: "NetInfoExample"
-      #     detox_configuration: "ios.sim.release"
-      #     detox_loglevel: "trace"
-      #     requires:
-      #       - analyse
+      - rn/ios_build:
+          project_path: "example/ios/NetInfoExample.xcodeproj"
+          derived_data_path: "example/ios/build"
+          device: "iPhone X"
+          build_configuration: "Release"
+          scheme: "NetInfoExample"
+          requires:
+            - checkout_code
       - publish:
           requires:
             - analyse
