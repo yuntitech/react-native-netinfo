@@ -213,7 +213,7 @@ const getCurrentState = (
   } else if (type === NetInfoStateType.unknown) {
     const state: NetInfoUnknownState = {
       ...baseState,
-      isConnected: null,
+      isConnected,
       isInternetReachable: null,
       type,
       details: null,
@@ -269,8 +269,8 @@ const RNCNetInfo: NetInfoNativeModule = {
         if (connection) {
           connection.removeEventListener('change', nativeHandler);
         } else {
-          window.addEventListener('online', nativeHandler);
-          window.addEventListener('offline', nativeHandler);
+          window.removeEventListener('online', nativeHandler);
+          window.removeEventListener('offline', nativeHandler);
         }
 
         // Remove handlers
@@ -284,6 +284,10 @@ const RNCNetInfo: NetInfoNativeModule = {
 
   async getCurrentState(requestedInterface): Promise<NetInfoNativeModuleState> {
     return getCurrentState(requestedInterface);
+  },
+
+  configure(): void {
+    return;
   },
 };
 

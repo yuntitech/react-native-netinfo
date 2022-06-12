@@ -44,7 +44,8 @@ android/.project
 # BUCK
 buck-out/
 \.buckd/
-debug.keystore
+*.keystore
+!debug.keystore
 
 # Editor config
 .vscode
@@ -66,3 +67,5 @@ lib/
 
 # npm package lock file
 package-lock.json
+
+msbuild.binlog

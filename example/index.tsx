@@ -23,6 +23,7 @@ import {
 import ConnectionInfoSubscription from './ConnectionInfoSubscription';
 import ConnectionInfoCurrent from './ConnectionInfoCurrent';
 import ConnectionInfoFetch from './ConnectionInfoFetch';
+import ConnectionInfoRefresh from './ConnectionInfoRefresh';
 import NetInfoHook from './NetInfoHook';
 import IsConnected from './IsConnected';
 
@@ -49,6 +50,14 @@ const EXAMPLES: Example[] = [
     description: 'Fetch the state on tap',
     render() {
       return <ConnectionInfoFetch />;
+    },
+  },
+  {
+    id: 'refresh',
+    title: 'NetInfo.refresh',
+    description: 'Refresh the state on tap',
+    render() {
+      return <ConnectionInfoRefresh />;
     },
   },
   {
@@ -84,6 +93,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5FCFF',
   },
   sectionTitle: {
+    color: 'black',
     fontSize: 24,
     marginHorizontal: 8,
     marginTop: 24,
@@ -97,6 +107,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   exampleTitle: {
+    color: 'black',
     fontSize: 18,
   },
   exampleDescription: {
@@ -117,8 +128,8 @@ interface State {
   activeTestCase: Example | null;
 }
 
-class ExampleApp extends React.Component<{}, State> {
-  constructor(props: {}) {
+class ExampleApp extends React.Component<Record<string, unknown>, State> {
+  constructor(props: Record<string, unknown>) {
     super(props);
 
     this.state = {
@@ -175,8 +186,8 @@ class ExampleApp extends React.Component<{}, State> {
   render() {
     const {activeTestCase} = this.state;
     return (
-      <ScrollView testID="scrollView" style={styles.container}>
-        <SafeAreaView>
+      <SafeAreaView style={styles.container}>
+        <ScrollView testID="scrollView">
           {activeTestCase ? (
             <>
               <Text testID="testCasesTitle" style={styles.sectionTitle}>
@@ -192,8 +203,8 @@ class ExampleApp extends React.Component<{}, State> {
               {EXAMPLES.map(this._renderExample)}
             </>
           )}
-        </SafeAreaView>
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
