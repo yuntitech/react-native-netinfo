@@ -10,11 +10,13 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.Bundle;
 import android.telephony.TelephonyManager;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.reactnativecommunity.netinfo.types.CellularGeneration;
@@ -45,6 +47,9 @@ public abstract class ConnectivityReceiver {
     private CellularGeneration mCellularGeneration = null;
     private boolean mIsInternetReachable = false;
     private Boolean mIsInternetReachableOverride;
+    private long mTimestamp = 0L ;
+
+    private Bundle mBundle ;
 
     private static String getSubnet(InetAddress inetAddress) throws SocketException {
         NetworkInterface netAddress = NetworkInterface.getByInetAddress(inetAddress);
@@ -155,123 +160,131 @@ public abstract class ConnectivityReceiver {
 
         // Add the details, if there are any
         String detailsInterface = requestedInterface != null ? requestedInterface : mConnectionType.label;
-        WritableMap details = createDetailsMap(detailsInterface);
+        WritableMap detailsMap = createDetailsMap(detailsInterface);
+
         if (isConnected) {
             boolean isConnectionExpensive =
                     getConnectivityManager() == null ? true : getConnectivityManager().isActiveNetworkMetered();
-            details.putBoolean("isConnectionExpensive", isConnectionExpensive);
+            detailsMap.putBoolean("isConnectionExpensive", isConnectionExpensive);
         }
-        event.putMap("details", details);
-
+        event.putMap("details", detailsMap);
         return event;
     }
 
     private WritableMap createDetailsMap(@Nonnull String detailsInterface) {
-        WritableMap details = Arguments.createMap();
-        switch (detailsInterface) {
-            case "cellular":
-                // Add the cellular generation, if we have one
-                if (mCellularGeneration != null) {
-                    details.putString("cellularGeneration", mCellularGeneration.label);
-                }
+        Bundle bundle ;
+        if(System.currentTimeMillis()-mTimestamp > 6000 || mBundle == null){
+            mTimestamp = System.currentTimeMillis() ;
+            bundle = new Bundle();
+            switch (detailsInterface) {
+                case "cellular":
+                    // Add the cellular generation, if we have one
+                    if (mCellularGeneration != null) {
+                        bundle.putString("cellularGeneration", mCellularGeneration.label);
+                    }
 
-                // Add the network operator name, if there is one
-                String carrier = mTelephonyManager.getNetworkOperatorName();
-                if (carrier != null) {
-                    details.putString("carrier", carrier);
-                }
-                break;
-            case "ethernet":
-                try {
-                    for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
-                        NetworkInterface netInterface = en.nextElement();
+                    // Add the network operator name, if there is one
+                    String carrier = mTelephonyManager.getNetworkOperatorName();
+                    if (carrier != null) {
+                        bundle.putString("carrier", carrier);
+                    }
+                    break;
+                case "ethernet":
+                    try {
+                        for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
+                            NetworkInterface netInterface = en.nextElement();
 
-                        for (Enumeration<InetAddress> ea = netInterface.getInetAddresses(); ea.hasMoreElements(); ) {
-                            InetAddress inetAddress = ea.nextElement();
-                            if (!inetAddress.isLoopbackAddress() && inetAddress instanceof Inet4Address) {
+                            for (Enumeration<InetAddress> ea = netInterface.getInetAddresses(); ea.hasMoreElements(); ) {
+                                InetAddress inetAddress = ea.nextElement();
+                                if (!inetAddress.isLoopbackAddress() && inetAddress instanceof Inet4Address) {
+                                    String ipAddress = inetAddress.getHostAddress();
+                                    bundle.putString("ipAddress", ipAddress);
+                                    bundle.putString("subnet", getSubnet(inetAddress));
+                                    mBundle = bundle ;
+                                    return Arguments.fromBundle(bundle);
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    break;
+                case "wifi":
+                    if (NetInfoUtils.isAccessWifiStatePermissionGranted(getReactContext())) {
+                        WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
+                        if (wifiInfo != null) {
+                            // Get the SSID
+                            try {
+                                String initialSSID = wifiInfo.getSSID();
+                                if (initialSSID != null && !initialSSID.contains("<unknown ssid>")) {
+                                    // Strip the quotes, if any
+                                    String ssid = initialSSID.replace("\"", "");
+                                    bundle.putString("ssid", ssid);
+                                }
+                            } catch (Exception e) {
+                                // Ignore errors
+                            }
+
+                            // Get the BSSID
+                            try {
+                                String bssid = wifiInfo.getBSSID();
+                                if (bssid != null) {
+                                    bundle.putString("bssid", bssid);
+                                }
+                            } catch (Exception e) {
+                                // Ignore errors
+                            }
+
+
+                            // Get/parse the wifi signal strength
+                            try {
+                                int signalStrength =
+                                        WifiManager.calculateSignalLevel(wifiInfo.getRssi(), 100);
+                                bundle.putInt("strength", signalStrength);
+                            } catch (Exception e) {
+                                // Ignore errors
+                            }
+
+                            // Get WiFi frequency
+                            try {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                    int frequency = wifiInfo.getFrequency();
+                                    bundle.putInt("frequency", frequency);
+                                }
+                            } catch (Exception e) {
+                                // Ignore errors
+                            }
+
+                            // Get the IP address
+                            try {
+                                byte[] ipAddressByteArray =
+                                        BigInteger.valueOf(wifiInfo.getIpAddress()).toByteArray();
+                                NetInfoUtils.reverseByteArray(ipAddressByteArray);
+                                InetAddress inetAddress = InetAddress.getByAddress(ipAddressByteArray);
                                 String ipAddress = inetAddress.getHostAddress();
-                                details.putString("ipAddress", ipAddress);
-                                details.putString("subnet", getSubnet(inetAddress));
-                                return details;
+                                bundle.putString("ipAddress", ipAddress);
+                            } catch (Exception e) {
+                                // Ignore errors
+                            }
+
+                            // Get the subnet mask
+                            try {
+                                byte[] ipAddressByteArray =
+                                        BigInteger.valueOf(wifiInfo.getIpAddress()).toByteArray();
+                                NetInfoUtils.reverseByteArray(ipAddressByteArray);
+                                InetAddress inetAddress = InetAddress.getByAddress(ipAddressByteArray);
+                                bundle.putString("subnet", getSubnet(inetAddress));
+                            } catch (Exception e) {
+                                // Ignore errors
                             }
                         }
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                break;
-            case "wifi":
-                if (NetInfoUtils.isAccessWifiStatePermissionGranted(getReactContext())) {
-                    WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
-                    if (wifiInfo != null) {
-                        // Get the SSID
-                        try {
-                            String initialSSID = wifiInfo.getSSID();
-                            if (initialSSID != null && !initialSSID.contains("<unknown ssid>")) {
-                                // Strip the quotes, if any
-                                String ssid = initialSSID.replace("\"", "");
-                                details.putString("ssid", ssid);
-                            }
-                        } catch (Exception e) {
-                            // Ignore errors
-                        }
-
-                        // Get the BSSID
-                        try {
-                            String bssid = wifiInfo.getBSSID();
-                            if (bssid != null) {
-                                details.putString("bssid", bssid);
-                            }
-                        } catch (Exception e) {
-                            // Ignore errors
-                        }
-
-
-                        // Get/parse the wifi signal strength
-                        try {
-                            int signalStrength =
-                                    WifiManager.calculateSignalLevel(wifiInfo.getRssi(), 100);
-                            details.putInt("strength", signalStrength);
-                        } catch (Exception e) {
-                            // Ignore errors
-                        }
-
-                        // Get WiFi frequency
-                        try {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                int frequency = wifiInfo.getFrequency();
-                                details.putInt("frequency", frequency);
-                            }
-                        } catch (Exception e) {
-                            // Ignore errors
-                        }
-
-                        // Get the IP address
-                        try {
-                            byte[] ipAddressByteArray =
-                                    BigInteger.valueOf(wifiInfo.getIpAddress()).toByteArray();
-                            NetInfoUtils.reverseByteArray(ipAddressByteArray);
-                            InetAddress inetAddress = InetAddress.getByAddress(ipAddressByteArray);
-                            String ipAddress = inetAddress.getHostAddress();
-                            details.putString("ipAddress", ipAddress);
-                        } catch (Exception e) {
-                            // Ignore errors
-                        }
-
-                        // Get the subnet mask
-                        try {
-                            byte[] ipAddressByteArray =
-                                    BigInteger.valueOf(wifiInfo.getIpAddress()).toByteArray();
-                            NetInfoUtils.reverseByteArray(ipAddressByteArray);
-                            InetAddress inetAddress = InetAddress.getByAddress(ipAddressByteArray);
-                            details.putString("subnet", getSubnet(inetAddress));
-                        } catch (Exception e) {
-                            // Ignore errors
-                        }
-                    }
-                }
-                break;
+                    break;
+            }
+            mBundle = bundle ;
+        }else {
+            bundle = mBundle ;
         }
-        return details;
+        return Arguments.fromBundle(bundle);
     }
 }
